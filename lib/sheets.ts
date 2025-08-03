@@ -1,7 +1,8 @@
 import { google } from 'googleapis';
-import { SolarData, SiteData } from './types';
+import { SolarData, SiteData, InstallerData } from './types';
 
 const GOOGLE_SHEET_ID = process.env.GOOGLE_SHEET_ID;
+const GOOGLE_SHEET_ID_2 = process.env.GOOGLE_SHEET_ID_2;
 const GOOGLE_SERVICE_ACCOUNT_EMAIL = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL;
 const GOOGLE_PRIVATE_KEY = process.env.GOOGLE_PRIVATE_KEY;
 
@@ -9,25 +10,13 @@ if (!GOOGLE_SHEET_ID || !GOOGLE_SERVICE_ACCOUNT_EMAIL || !GOOGLE_PRIVATE_KEY) {
   throw new Error('Missing Google Sheets API credentials. Please check your environment variables.');
 }
 
-// Create JWT auth client with robust private key handling
+// Create JWT auth client with simple private key handling
 let privateKey;
 try {
-  // Handle different private key formats and clean it up
+  // Simple conversion of escaped newlines to actual newlines
   privateKey = GOOGLE_PRIVATE_KEY
     .replace(/\\n/g, '\n')  // Convert escaped newlines
-    .replace(/\s+/g, '\n')  // Normalize whitespace to newlines
-    .replace(/\n+/g, '\n')  // Remove duplicate newlines
     .trim();
-  
-  // If it doesn't start with BEGIN, add the headers
-  if (!privateKey.includes('-----BEGIN PRIVATE KEY-----')) {
-    privateKey = `-----BEGIN PRIVATE KEY-----\n${privateKey}\n-----END PRIVATE KEY-----`;
-  }
-  
-  // Ensure proper formatting
-  if (!privateKey.endsWith('-----END PRIVATE KEY-----')) {
-    privateKey = privateKey.replace(/-----END PRIVATE KEY-----.*$/, '-----END PRIVATE KEY-----');
-  }
 } catch (error) {
   throw new Error(`Invalid private key format: ${error}`);
 }
@@ -43,30 +32,34 @@ const sheets = google.sheets({ version: 'v4', auth });
 
 export async function fetchSolarData(): Promise<SiteData> {
   try {
-    const response = await sheets.spreadsheets.values.get({
+    // Fetch data from first sheet (solar systems data)
+    const response1 = await sheets.spreadsheets.values.get({
       spreadsheetId: GOOGLE_SHEET_ID,
       range: 'A:Z', // Get all columns to be future-proof
     });
 
-    const rows = response.data.values;
-    if (!rows || rows.length === 0) {
-      throw new Error('No data found in the sheet');
+    const rows1 = response1.data.values;
+    if (!rows1 || rows1.length === 0) {
+      throw new Error('No data found in the first sheet');
     }
 
-    const headers = rows[0] as string[];
-    const dataRows = rows.slice(1);
+    const headers1 = rows1[0] as string[];
+    const dataRows1 = rows1.slice(1);
 
     // Map rows to objects using headers
-    const allData: SolarData[] = dataRows.map(row => {
+    const allData: SolarData[] = dataRows1.map(row => {
       const item: SolarData = {
         suburb: '',
         brand: '',
-        system_size: '',
-        avg_cost: '',
-        description: ''
+        installer_name: '',
+        rating: '',
+        reviews_count: '',
+        main_brands: '',
+        featured_priority: '',
+        website: ''
       };
       
-      headers.forEach((header, index) => {
+      headers1.forEach((header, index) => {
         const value = row[index] || '';
         item[header.toLowerCase().replace(/\s+/g, '_')] = value;
       });
@@ -74,16 +67,53 @@ export async function fetchSolarData(): Promise<SiteData> {
       return item;
     });
 
+    // Fetch data from second sheet (installer data)
+    let installerData: InstallerData[] = [];
+    if (GOOGLE_SHEET_ID_2) {
+      try {
+        const response2 = await sheets.spreadsheets.values.get({
+          spreadsheetId: GOOGLE_SHEET_ID_2,
+          range: 'A:Z',
+        });
+
+        const rows2 = response2.data.values;
+        if (rows2 && rows2.length > 0) {
+          const headers2 = rows2[0] as string[];
+          const dataRows2 = rows2.slice(1);
+
+          installerData = dataRows2.map(row => {
+            const item: InstallerData = {
+              suburb: '',
+              brand: '',
+              installer_name: '',
+              featured_priority: ''
+            };
+            
+            headers2.forEach((header, index) => {
+              const value = row[index] || '';
+              item[header.toLowerCase().replace(/\s+/g, '_')] = value;
+            });
+            
+            return item;
+          });
+        }
+      } catch (error) {
+        console.warn('Warning: Could not fetch installer data from second sheet:', error);
+      }
+    }
+
     // Extract unique values for navigation
     const suburbs = [...new Set(allData.map(item => item.suburb))].filter(Boolean).sort();
     const brands = [...new Set(allData.map(item => item.brand))].filter(Boolean).sort();
-    const systemSizes = [...new Set(allData.map(item => item.system_size))].filter(Boolean).sort();
+    // Extract installers for potential navigation
+    const installers = [...new Set(allData.map(item => item.installer_name))].filter(Boolean).sort();
 
     return {
       allData,
+      installerData,
       suburbs,
       brands,
-      systemSizes
+      systemSizes: installers // Using installers instead of system sizes for now
     };
   } catch (error) {
     console.error('Error fetching data from Google Sheets:', error);
@@ -97,17 +127,37 @@ export function getSuburbData(allData: SolarData[], suburb: string): SolarData[]
   );
 }
 
-export function getBrandSystemData(
+export function getInstallerData(
+  installerData: InstallerData[], 
+  suburb: string, 
+  brand?: string
+): InstallerData[] {
+  return installerData.filter(item => {
+    const matchesSuburb = item.suburb.toLowerCase() === suburb.toLowerCase();
+    const matchesBrand = !brand || item.brand.toLowerCase() === brand.toLowerCase();
+    return matchesSuburb && matchesBrand;
+  }).sort((a, b) => {
+    // Sort by featured_priority (lower numbers first)
+    const priorityA = parseInt(a.featured_priority) || 999;
+    const priorityB = parseInt(b.featured_priority) || 999;
+    return priorityA - priorityB;
+  });
+}
+
+export function getBrandData(
   allData: SolarData[], 
   suburb: string, 
-  brand: string, 
-  systemSize: string
+  brand: string
 ): SolarData[] {
   return allData.filter(item => 
     item.suburb.toLowerCase() === suburb.toLowerCase() &&
-    item.brand.toLowerCase() === brand.toLowerCase() &&
-    item.system_size.toLowerCase() === systemSize.toLowerCase()
-  );
+    item.brand.toLowerCase() === brand.toLowerCase()
+  ).sort((a, b) => {
+    // Sort by featured_priority (lower numbers first)
+    const priorityA = parseInt(a.featured_priority) || 999;
+    const priorityB = parseInt(b.featured_priority) || 999;
+    return priorityA - priorityB;
+  });
 }
 
 export function getRelatedSuburbs(suburbs: string[], currentSuburb: string, limit: number = 5): string[] {

@@ -48,9 +48,9 @@ export default async function SuburbPage({ params }: Props) {
   const relatedSuburbs = getRelatedSuburbs(siteData.suburbs, exactSuburb, 5);
   const relatedBrands = getRelatedBrands(siteData.brands, undefined, 5);
   
-  // Group data by brand and system size
-  const brandSystemCombos = suburbData.reduce((acc, item) => {
-    const key = `${item.brand}-${item.system_size}`;
+  // Group data by brand
+  const brandCombos = suburbData.reduce((acc, item) => {
+    const key = item.brand;
     if (!acc[key]) {
       acc[key] = [];
     }
@@ -96,35 +96,46 @@ export default async function SuburbPage({ params }: Props) {
         </p>
       </div>
 
-      {/* Solar Options Grid */}
+      {/* Solar Brands Grid */}
       <section className="mb-16">
         <h2 className="text-3xl font-bold text-gray-900 mb-8">
-          Solar Options in {suburbName}
+          Solar Brands Available in {suburbName}
         </h2>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {Object.entries(brandSystemCombos).map(([key, items]) => {
-            const item = items[0]; // Use first item for display
-            const brandSystemSlug = `${item.brand.toLowerCase().replace(/\s+/g, '-')}-${item.system_size.toLowerCase().replace(/\s+/g, '-')}`;
+          {Object.entries(brandCombos).map(([brand, installers]) => {
+            const brandSlug = brand.toLowerCase().replace(/\s+/g, '-');
+            const topInstaller = installers.sort((a, b) => {
+              const priorityA = parseInt(a.featured_priority) || 999;
+              const priorityB = parseInt(b.featured_priority) || 999;
+              return priorityA - priorityB;
+            })[0];
             
             return (
               <Link
-                key={key}
-                href={`/solar/${params.suburb}/${brandSystemSlug}`}
+                key={brand}
+                href={`/solar/${params.suburb}/${brandSlug}`}
                 className="card hover:border-primary-200 transition-all group"
               >
                 <div className="flex justify-between items-start mb-4">
                   <h3 className="text-xl font-semibold text-gray-900 group-hover:text-primary-600 transition-colors">
-                    {item.brand} {item.system_size}
+                    {brand} Solar Installers
                   </h3>
-                  <span className="text-lg font-bold text-primary-600">
-                    {item.avg_cost}
+                  <span className="text-sm bg-primary-100 text-primary-800 px-2 py-1 rounded">
+                    {installers.length} installer{installers.length > 1 ? 's' : ''}
                   </span>
                 </div>
-                <p className="text-gray-600 text-sm mb-4 line-clamp-3">
-                  {item.description || `Premium ${item.brand} ${item.system_size} solar system installation in ${suburbName}.`}
-                </p>
+                <div className="mb-3">
+                  <div className="flex items-center mb-2">
+                    <span className="text-yellow-400 mr-1">★</span>
+                    <span className="font-medium">{topInstaller.rating}</span>
+                    <span className="text-gray-600 ml-1">({topInstaller.reviews_count} reviews)</span>
+                  </div>
+                  <p className="text-gray-600 text-sm">
+                    Top installer: {topInstaller.installer_name}
+                  </p>
+                </div>
                 <div className="text-primary-600 text-sm font-medium">
-                  View Details →
+                  View {brand} Installers →
                 </div>
               </Link>
             );
@@ -141,9 +152,9 @@ export default async function SuburbPage({ params }: Props) {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6 text-center">
             <div>
               <div className="text-3xl font-bold text-primary-600 mb-2">
-                {Object.keys(brandSystemCombos).length}
+                {Object.keys(brandCombos).length}
               </div>
-              <div className="text-gray-600">Solar Options Available</div>
+              <div className="text-gray-600">Solar Brands Available</div>
             </div>
             <div>
               <div className="text-3xl font-bold text-primary-600 mb-2">
