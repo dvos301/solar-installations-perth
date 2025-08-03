@@ -9,11 +9,24 @@ if (!GOOGLE_SHEET_ID || !GOOGLE_SERVICE_ACCOUNT_EMAIL || !GOOGLE_PRIVATE_KEY) {
   throw new Error('Missing Google Sheets API credentials. Please check your environment variables.');
 }
 
-// Create JWT auth client
+// Create JWT auth client with better private key handling
+let privateKey;
+try {
+  // Handle different private key formats
+  privateKey = GOOGLE_PRIVATE_KEY.replace(/\\n/g, '\n');
+  
+  // If it doesn't start with BEGIN, add the headers
+  if (!privateKey.includes('-----BEGIN PRIVATE KEY-----')) {
+    privateKey = `-----BEGIN PRIVATE KEY-----\n${privateKey}\n-----END PRIVATE KEY-----`;
+  }
+} catch (error) {
+  throw new Error(`Invalid private key format: ${error}`);
+}
+
 const auth = new google.auth.JWT(
   GOOGLE_SERVICE_ACCOUNT_EMAIL,
   undefined,
-  GOOGLE_PRIVATE_KEY.replace(/\\n/g, '\n'), // Handle escaped newlines
+  privateKey,
   ['https://www.googleapis.com/auth/spreadsheets.readonly']
 );
 
