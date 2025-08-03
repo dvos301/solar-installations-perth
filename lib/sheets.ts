@@ -6,27 +6,64 @@ const GOOGLE_SHEET_ID_2 = process.env.GOOGLE_SHEET_ID_2;
 const GOOGLE_SERVICE_ACCOUNT_EMAIL = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL;
 const GOOGLE_PRIVATE_KEY = process.env.GOOGLE_PRIVATE_KEY;
 
+// Check for required environment variables
 if (!GOOGLE_SHEET_ID || !GOOGLE_SERVICE_ACCOUNT_EMAIL || !GOOGLE_PRIVATE_KEY) {
+  console.error('Missing environment variables:', {
+    GOOGLE_SHEET_ID: !!GOOGLE_SHEET_ID,
+    GOOGLE_SERVICE_ACCOUNT_EMAIL: !!GOOGLE_SERVICE_ACCOUNT_EMAIL,
+    GOOGLE_PRIVATE_KEY: !!GOOGLE_PRIVATE_KEY
+  });
   throw new Error('Missing Google Sheets API credentials. Please check your environment variables.');
 }
 
-// Create JWT auth client with simple private key handling
-let privateKey;
+// Initialize Google Sheets API with robust private key processing
+let processedPrivateKey: string;
 try {
-  // Simple conversion of escaped newlines to actual newlines
-  privateKey = GOOGLE_PRIVATE_KEY
-    .replace(/\\n/g, '\n')  // Convert escaped newlines
+  // Multiple methods to handle private key formatting
+  let rawKey = GOOGLE_PRIVATE_KEY;
+  
+  // Method 1: Handle escaped newlines
+  if (rawKey.includes('\\n')) {
+    rawKey = rawKey.replace(/\\n/g, '\n');
+  }
+  
+  // Method 2: If it's a single line, try to reconstruct proper format
+  if (!rawKey.includes('\n') && rawKey.includes('-----BEGIN PRIVATE KEY-----')) {
+    // Split on the header and footer to reconstruct
+    const keyParts = rawKey.split('-----BEGIN PRIVATE KEY-----')[1]?.split('-----END PRIVATE KEY-----')[0];
+    if (keyParts) {
+      // Add newlines every 64 characters (standard PEM format)
+      const formattedKey = keyParts.replace(/(.{64})/g, '$1\n').trim();
+      rawKey = `-----BEGIN PRIVATE KEY-----\n${formattedKey}\n-----END PRIVATE KEY-----`;
+    }
+  }
+  
+  processedPrivateKey = rawKey
+    .replace(/\n\s+/g, '\n') // Remove extra whitespace after newlines
     .trim();
+    
+  // Validate the key format
+  if (!processedPrivateKey.includes('-----BEGIN PRIVATE KEY-----')) {
+    throw new Error('Private key missing proper header');
+  }
+  if (!processedPrivateKey.includes('-----END PRIVATE KEY-----')) {
+    throw new Error('Private key missing proper footer');
+  }
+  
+  console.log('Private key processed successfully');
 } catch (error) {
+  console.error('Error processing private key:', error);
+  console.error('Private key format (first 50 chars):', GOOGLE_PRIVATE_KEY?.substring(0, 50));
   throw new Error(`Invalid private key format: ${error}`);
 }
 
-const auth = new google.auth.JWT(
-  GOOGLE_SERVICE_ACCOUNT_EMAIL,
-  undefined,
-  privateKey,
-  ['https://www.googleapis.com/auth/spreadsheets.readonly']
-);
+const auth = new google.auth.GoogleAuth({
+  credentials: {
+    client_email: GOOGLE_SERVICE_ACCOUNT_EMAIL,
+    private_key: processedPrivateKey,
+  },
+  scopes: ['https://www.googleapis.com/auth/spreadsheets.readonly'],
+});
 
 const sheets = google.sheets({ version: 'v4', auth });
 
