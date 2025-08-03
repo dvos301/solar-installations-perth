@@ -1,14 +1,23 @@
 import { google } from 'googleapis';
 import { SolarData, SiteData } from './types';
 
-const GOOGLE_SHEETS_API_KEY = process.env.GOOGLE_SHEETS_API_KEY;
 const GOOGLE_SHEET_ID = process.env.GOOGLE_SHEET_ID;
+const GOOGLE_SERVICE_ACCOUNT_EMAIL = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL;
+const GOOGLE_PRIVATE_KEY = process.env.GOOGLE_PRIVATE_KEY;
 
-if (!GOOGLE_SHEETS_API_KEY || !GOOGLE_SHEET_ID) {
-  throw new Error('Missing Google Sheets API credentials. Please check your .env file.');
+if (!GOOGLE_SHEET_ID || !GOOGLE_SERVICE_ACCOUNT_EMAIL || !GOOGLE_PRIVATE_KEY) {
+  throw new Error('Missing Google Sheets API credentials. Please check your environment variables.');
 }
 
-const sheets = google.sheets({ version: 'v4', auth: GOOGLE_SHEETS_API_KEY });
+// Create JWT auth client
+const auth = new google.auth.JWT(
+  GOOGLE_SERVICE_ACCOUNT_EMAIL,
+  undefined,
+  GOOGLE_PRIVATE_KEY.replace(/\\n/g, '\n'), // Handle escaped newlines
+  ['https://www.googleapis.com/auth/spreadsheets.readonly']
+);
+
+const sheets = google.sheets({ version: 'v4', auth });
 
 export async function fetchSolarData(): Promise<SiteData> {
   try {
