@@ -67,8 +67,34 @@ const auth = new google.auth.GoogleAuth({
 
 const sheets = google.sheets({ version: 'v4', auth });
 
+// Cache for storing fetched data to avoid repeated API calls
+let cachedData: SiteData | null = null;
+let cacheTimestamp: number = 0;
+const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
+
+// Rate limiting
+let lastRequestTime = 0;
+const MIN_REQUEST_INTERVAL = 100; // 100ms between requests
+
+async function rateLimitedDelay() {
+  const now = Date.now();
+  const timeSinceLastRequest = now - lastRequestTime;
+  if (timeSinceLastRequest < MIN_REQUEST_INTERVAL) {
+    await new Promise(resolve => setTimeout(resolve, MIN_REQUEST_INTERVAL - timeSinceLastRequest));
+  }
+  lastRequestTime = Date.now();
+}
+
 export async function fetchSolarData(): Promise<SiteData> {
+  // Check cache first
+  const now = Date.now();
+  if (cachedData && (now - cacheTimestamp) < CACHE_DURATION) {
+    console.log('Returning cached data');
+    return cachedData;
+  }
+
   try {
+    await rateLimitedDelay();
     // Fetch data from first sheet (solar systems data)
     const response1 = await sheets.spreadsheets.values.get({
       spreadsheetId: GOOGLE_SHEET_ID,
