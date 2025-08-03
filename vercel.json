@@ -1,0 +1,24 @@
+{
+  "buildCommand": "npm run build",
+  "outputDirectory": "out",
+  "devCommand": "npm run dev",
+  "installCommand": "npm install",
+  "framework": "nextjs",
+  "functions": {
+    "app/api/**/*.js": {
+      "runtime": "nodejs18.x"
+    }
+  },
+  "env": {
+    "GOOGLE_SHEETS_API_KEY": "@google_sheets_api_key",
+    "GOOGLE_SHEET_ID": "@google_sheet_id",
+    "NEXT_PUBLIC_SITE_URL": "@next_public_site_url"
+  },
+  "build": {
+    "env": {
+      "GOOGLE_SHEETS_API_KEY": "@google_sheets_api_key",
+      "GOOGLE_SHEET_ID": "@google_sheet_id",
+      "NEXT_PUBLIC_SITE_URL": "@next_public_site_url"
+    }
+  }
+}
