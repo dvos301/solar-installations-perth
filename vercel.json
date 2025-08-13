@@ -1,11 +1,3 @@
 {
-  "buildCommand": "npm run build",
-  "devCommand": "npm run dev",
-  "installCommand": "npm install",
-  "framework": "nextjs",
-  "functions": {
-    "app/**/*.js": {
-      "maxDuration": 30
-    }
-  }
+  "framework": "nextjs"
 }
