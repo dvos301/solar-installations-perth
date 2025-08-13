@@ -12,10 +12,17 @@ interface Props {
 export async function generateStaticParams() {
   const siteData = await fetchSolarData();
   
-  return siteData.suburbs.map((suburb) => ({
+  // Only pre-generate the most popular suburbs to reduce build time
+  // ISR will handle the rest on-demand
+  const popularSuburbs = siteData.suburbs.slice(0, 20); // Limit to top 20 suburbs
+  
+  return popularSuburbs.map((suburb) => ({
     suburb: suburb.toLowerCase().replace(/\s+/g, '-'),
   }));
 }
+
+// Enable ISR with 24-hour revalidation
+export const revalidate = 86400; // 24 hours in seconds
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const suburbName = params.suburb.replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase());

@@ -1,5 +1,7 @@
 import { google } from 'googleapis';
 import { SolarData, SiteData, InstallerData } from './types';
+import fs from 'fs';
+import path from 'path';
 
 const GOOGLE_SHEET_ID = process.env.GOOGLE_SHEET_ID;
 const GOOGLE_SHEET_ID_2 = process.env.GOOGLE_SHEET_ID_2;
@@ -67,14 +69,46 @@ const auth = new google.auth.GoogleAuth({
 
 const sheets = google.sheets({ version: 'v4', auth });
 
-// Cache for storing fetched data to avoid repeated API calls
+// File-based cache for build-time persistence
+const CACHE_DIR = path.join(process.cwd(), '.cache');
+const CACHE_FILE = path.join(CACHE_DIR, 'solar-data.json');
+const CACHE_DURATION = 10 * 60 * 1000; // 10 minutes
+const MIN_REQUEST_INTERVAL = 200; // 200ms between requests
+
+// Ensure cache directory exists
+if (!fs.existsSync(CACHE_DIR)) {
+  fs.mkdirSync(CACHE_DIR, { recursive: true });
+}
+
+// Global cache and synchronization
 let cachedData: SiteData | null = null;
 let cacheTimestamp: number = 0;
-const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
-
-// Rate limiting
+let fetchPromise: Promise<SiteData> | null = null;
 let lastRequestTime = 0;
-const MIN_REQUEST_INTERVAL = 100; // 100ms between requests
+
+// File-based cache functions
+function readCacheFile(): { data: SiteData | null, timestamp: number } {
+  try {
+    if (fs.existsSync(CACHE_FILE)) {
+      const cacheContent = fs.readFileSync(CACHE_FILE, 'utf8');
+      const parsed = JSON.parse(cacheContent);
+      return { data: parsed.data, timestamp: parsed.timestamp };
+    }
+  } catch (error) {
+    console.warn('Failed to read cache file:', error);
+  }
+  return { data: null, timestamp: 0 };
+}
+
+function writeCacheFile(data: SiteData, timestamp: number): void {
+  try {
+    const cacheContent = { data, timestamp };
+    fs.writeFileSync(CACHE_FILE, JSON.stringify(cacheContent, null, 2));
+    console.log('Cache file written successfully');
+  } catch (error) {
+    console.warn('Failed to write cache file:', error);
+  }
+}
 
 async function rateLimitedDelay() {
   const now = Date.now();
@@ -86,15 +120,46 @@ async function rateLimitedDelay() {
 }
 
 export async function fetchSolarData(): Promise<SiteData> {
-  // Check cache first
   const now = Date.now();
+  
+  // Check memory cache first
   if (cachedData && (now - cacheTimestamp) < CACHE_DURATION) {
-    console.log('Returning cached data');
+    console.log('Returning memory cached data');
     return cachedData;
   }
+  
+  // Check file cache
+  const { data: fileData, timestamp: fileTimestamp } = readCacheFile();
+  if (fileData && (now - fileTimestamp) < CACHE_DURATION) {
+    console.log('Returning file cached data');
+    cachedData = fileData;
+    cacheTimestamp = fileTimestamp;
+    return fileData;
+  }
+  
+  // If a fetch is already in progress, wait for it
+  if (fetchPromise) {
+    console.log('Waiting for existing fetch to complete...');
+    return await fetchPromise;
+  }
+  
+  // Start new fetch with proper synchronization
+  fetchPromise = performDataFetch();
+  
+  try {
+    const result = await fetchPromise;
+    return result;
+  } finally {
+    fetchPromise = null;
+  }
+}
+
+async function performDataFetch(): Promise<SiteData> {
 
   try {
+    console.log('Performing fresh data fetch from Google Sheets...');
     await rateLimitedDelay();
+    
     // Fetch data from first sheet (solar systems data)
     const response1 = await sheets.spreadsheets.values.get({
       spreadsheetId: GOOGLE_SHEET_ID,
@@ -171,15 +236,38 @@ export async function fetchSolarData(): Promise<SiteData> {
     // Extract installers for potential navigation
     const installers = [...new Set(allData.map(item => item.installer_name))].filter(Boolean).sort();
 
-    return {
+    const siteData: SiteData = {
       allData,
       installerData,
       suburbs,
       brands,
       systemSizes: installers // Using installers instead of system sizes for now
     };
+    
+    // Update both memory and file cache
+    const now = Date.now();
+    cachedData = siteData;
+    cacheTimestamp = now;
+    writeCacheFile(siteData, now);
+    
+    console.log(`Successfully fetched and cached ${allData.length} records`);
+    return siteData;
   } catch (error) {
     console.error('Error fetching data from Google Sheets:', error);
+    
+    // Try to return any available cached data as fallback
+    if (cachedData) {
+      console.log('Returning memory cached data due to error');
+      return cachedData;
+    }
+    
+    const { data: fileData } = readCacheFile();
+    if (fileData) {
+      console.log('Returning file cached data due to error');
+      cachedData = fileData;
+      return fileData;
+    }
+    
     throw error;
   }
 }

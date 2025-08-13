@@ -1,7 +1,11 @@
 {
   "buildCommand": "npm run build",
-  "outputDirectory": "out",
   "devCommand": "npm run dev",
   "installCommand": "npm install",
-  "framework": "nextjs"
+  "framework": "nextjs",
+  "functions": {
+    "app/**/*.js": {
+      "maxDuration": 30
+    }
+  }
 }

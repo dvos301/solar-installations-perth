@@ -4,10 +4,13 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "prebuild": "node scripts/prebuild.js",
+    "build": "npm run prebuild && next build",
+    "build:analyze": "ANALYZE=true npm run build",
     "start": "next start",
     "lint": "next lint",
-    "postbuild": "next-sitemap"
+    "postbuild": "next-sitemap",
+    "deploy:vercel": "npm run prebuild && vercel --prod"
   },
   "dependencies": {
     "dotenv": "^17.2.1",

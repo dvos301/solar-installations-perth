@@ -16,12 +16,24 @@ export async function generateStaticParams() {
   const params = [];
   const seen = new Set();
   
+  // Only pre-generate compare pages for top combinations
+  const popularSuburbs = siteData.suburbs.slice(0, 5); // Top 5 suburbs only
+  const popularBrands = siteData.brands.slice(0, 5); // Top 5 brands only
+  
   for (const item of siteData.allData) {
     const suburbSlug = item.suburb.toLowerCase().replace(/\s+/g, '-');
     const brandSlug = item.brand.toLowerCase().replace(/\s+/g, '-');
     const key = `${suburbSlug}-${brandSlug}`;
     
-    if (!seen.has(key)) {
+    // Only include if both suburb and brand are in popular lists
+    const isPopularSuburb = popularSuburbs.some(s => 
+      s.toLowerCase().replace(/\s+/g, '-') === suburbSlug
+    );
+    const isPopularBrand = popularBrands.some(b => 
+      b.toLowerCase().replace(/\s+/g, '-') === brandSlug
+    );
+    
+    if (!seen.has(key) && isPopularSuburb && isPopularBrand) {
       seen.add(key);
       params.push({
         suburb: suburbSlug,
@@ -30,8 +42,12 @@ export async function generateStaticParams() {
     }
   }
   
+  console.log(`Pre-generating ${params.length} compare pages`);
   return params;
 }
+
+// Enable ISR with 24-hour revalidation
+export const revalidate = 86400; // 24 hours in seconds
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const siteData = await fetchSolarData();

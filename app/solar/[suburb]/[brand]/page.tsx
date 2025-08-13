@@ -17,13 +17,26 @@ export async function generateStaticParams() {
   const params = [];
   const seen = new Set();
   
+  // Only pre-generate combinations for popular suburbs and brands
+  // to significantly reduce build time
+  const popularSuburbs = siteData.suburbs.slice(0, 10); // Top 10 suburbs
+  const popularBrands = siteData.brands.slice(0, 8); // Top 8 brands
+  
   for (const item of siteData.allData) {
     const suburbSlug = item.suburb.toLowerCase().replace(/\s+/g, '-');
     const brandSlug = item.brand.toLowerCase().replace(/\s+/g, '-');
     const key = `${suburbSlug}-${brandSlug}`;
     
-    // Avoid duplicates since multiple installers may have same suburb-brand combo
-    if (!seen.has(key)) {
+    // Only include if both suburb and brand are in popular lists
+    const isPopularSuburb = popularSuburbs.some(s => 
+      s.toLowerCase().replace(/\s+/g, '-') === suburbSlug
+    );
+    const isPopularBrand = popularBrands.some(b => 
+      b.toLowerCase().replace(/\s+/g, '-') === brandSlug
+    );
+    
+    // Avoid duplicates and only include popular combinations
+    if (!seen.has(key) && isPopularSuburb && isPopularBrand) {
       seen.add(key);
       params.push({
         suburb: suburbSlug,
@@ -32,8 +45,12 @@ export async function generateStaticParams() {
     }
   }
   
+  console.log(`Pre-generating ${params.length} suburb-brand combinations`);
   return params;
 }
+
+// Enable ISR with 24-hour revalidation
+export const revalidate = 86400; // 24 hours in seconds
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const siteData = await fetchSolarData();
