@@ -10,7 +10,8 @@
     "start": "next start",
     "lint": "next lint",
     "postbuild": "next-sitemap",
-    "deploy:vercel": "npm run prebuild && vercel --prod"
+    "deploy:vercel": "npm run prebuild && vercel --prod",
+    "test:env": "node scripts/test-env.js"
   },
   "dependencies": {
     "dotenv": "^17.2.1",

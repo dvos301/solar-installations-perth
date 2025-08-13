@@ -18,30 +18,32 @@ if (!GOOGLE_SHEET_ID || !GOOGLE_SERVICE_ACCOUNT_EMAIL || !GOOGLE_PRIVATE_KEY) {
   throw new Error('Missing Google Sheets API credentials. Please check your environment variables.');
 }
 
-// Initialize Google Sheets API with robust private key processing
+// Initialize Google Sheets API with robust private key processing for Vercel
 let processedPrivateKey: string;
 try {
-  // Multiple methods to handle private key formatting
   let rawKey = GOOGLE_PRIVATE_KEY;
   
-  // Method 1: Handle escaped newlines
+  // Method 1: Handle escaped newlines (common in .env files)
   if (rawKey.includes('\\n')) {
     rawKey = rawKey.replace(/\\n/g, '\n');
   }
   
-  // Method 2: If it's a single line, try to reconstruct proper format
+  // Method 2: Handle single-line keys (Vercel environment variables)
   if (!rawKey.includes('\n') && rawKey.includes('-----BEGIN PRIVATE KEY-----')) {
-    // Split on the header and footer to reconstruct
-    const keyParts = rawKey.split('-----BEGIN PRIVATE KEY-----')[1]?.split('-----END PRIVATE KEY-----')[0];
-    if (keyParts) {
-      // Add newlines every 64 characters (standard PEM format)
-      const formattedKey = keyParts.replace(/(.{64})/g, '$1\n').trim();
-      rawKey = `-----BEGIN PRIVATE KEY-----\n${formattedKey}\n-----END PRIVATE KEY-----`;
+    // Extract the key content between headers using regex
+    const keyMatch = rawKey.match(/-----BEGIN PRIVATE KEY-----(.+?)-----END PRIVATE KEY-----/);
+    if (keyMatch) {
+      const keyContent = keyMatch[1].replace(/\s/g, '');
+      // Add proper line breaks every 64 characters (standard PEM format)
+      const formattedContent = keyContent.match(/.{1,64}/g)?.join('\n') || keyContent;
+      rawKey = `-----BEGIN PRIVATE KEY-----\n${formattedContent}\n-----END PRIVATE KEY-----`;
     }
   }
   
+  // Method 3: Clean up any extra whitespace
   processedPrivateKey = rawKey
-    .replace(/\n\s+/g, '\n') // Remove extra whitespace after newlines
+    .replace(/\n\s+/g, '\n')
+    .replace(/\s+\n/g, '\n')
     .trim();
     
   // Validate the key format
@@ -52,9 +54,9 @@ try {
     throw new Error('Private key missing proper footer');
   }
   
-  console.log('Private key processed successfully');
+  console.log('✅ Private key processed successfully');
 } catch (error) {
-  console.error('Error processing private key:', error);
+  console.error('❌ Error processing private key:', error);
   console.error('Private key format (first 50 chars):', GOOGLE_PRIVATE_KEY?.substring(0, 50));
   throw new Error(`Invalid private key format: ${error}`);
 }
@@ -63,6 +65,7 @@ const auth = new google.auth.GoogleAuth({
   credentials: {
     client_email: GOOGLE_SERVICE_ACCOUNT_EMAIL,
     private_key: processedPrivateKey,
+    type: 'service_account',
   },
   scopes: ['https://www.googleapis.com/auth/spreadsheets.readonly'],
 });
